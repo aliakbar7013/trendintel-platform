@@ -74,8 +74,8 @@ export async function runAutoPublisher(
       categories = localStore.getCategories();
     }
 
-    // Query site settings for dynamic daily volume control
-    let settings = { articlesPerRun: 2 };
+    // Query site settings for dynamic daily volume control (default 1 article per run for snappy serverless execution)
+    let settings = { articlesPerRun: 1 };
     try {
       const liveSettings = await getSiteSettings();
       if (liveSettings) settings = liveSettings;
@@ -83,10 +83,8 @@ export async function runAutoPublisher(
       // Non-blocking fallback
     }
 
-    // 1 article for snappy manual UI runs (~12-15s); configured batch (default 2) for scheduled cron runs
-    // 2 articles every 30 minutes = 48 runs * 2 = 96 articles/day (or 1 every 28 min = 50 articles/day)
-    const MAX_ARTICLES_PER_RUN =
-      triggeredBy === "admin_manual" ? 1 : Math.max(1, settings.articlesPerRun || 2);
+    // 1 article per run runs in ~6-8s without timing out; 48-50 runs per day = 50 articles/day
+    const MAX_ARTICLES_PER_RUN = Math.max(1, settings.articlesPerRun || 1);
 
     // Shuffle categories so publication is evenly distributed across AI, Crypto, Finance & Startups
     const randomizedCategories = [...categories].sort(() => Math.random() - 0.5);
