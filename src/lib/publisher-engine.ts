@@ -1,6 +1,6 @@
 import Parser from "rss-parser";
 import { revalidatePath } from "next/cache";
-import { prisma } from "./prisma";
+import { prisma, isDatabaseConfigured } from "./prisma";
 import { generateContentHash } from "./hasher";
 import { extractArticleContent } from "./extractor";
 import { synthesizeNewsArticle, countWords } from "./ai";
@@ -47,29 +47,33 @@ export async function runAutoPublisher(
 
   console.log(`[AutoPublisher] Starting execution (Triggered by: ${triggeredBy})...`);
 
-  // Run automated crawl-budget content pruning routine
-  try {
-    await pruneUnderperformingArticles();
-  } catch (pruneErr: any) {
-    console.warn("[AutoPublisher] Pruning pass notice:", pruneErr.message);
+  // Run automated crawl-budget content pruning routine if DB is configured
+  if (isDatabaseConfigured()) {
+    try {
+      await pruneUnderperformingArticles();
+    } catch (pruneErr: any) {
+      console.warn("[AutoPublisher] Pruning pass notice:", pruneErr.message);
+    }
   }
 
   try {
     // 1. Fetch active categories and feeds
     let categories: any[] = [];
-    try {
-      categories = await prisma.category.findMany({
-        include: {
-          feeds: {
-            where: { isActive: true },
+    if (isDatabaseConfigured()) {
+      try {
+        categories = await prisma.category.findMany({
+          include: {
+            feeds: {
+              where: { isActive: true },
+            },
           },
-        },
-      });
-    } catch (err: any) {
-      console.warn("Could not query DB categories directly:", err.message);
+        });
+      } catch (err: any) {
+        console.warn("Could not query DB categories directly:", err.message);
+      }
     }
 
-    // Fallback if DB empty or not yet seeded
+    // Fallback if DB empty, not reachable, or not yet seeded
     if (!categories || categories.length === 0) {
       categories = localStore.getCategories();
     }
@@ -150,7 +154,7 @@ export async function runAutoPublisher(
           let rawTitle = itemTitle;
           let sourcePublisher = feed.name || item.creator || "Editorial Bureau";
 
-          const extracted = await extractArticleContent(itemUrl, 6000);
+          const extracted = await extractArticleContent(itemUrl, 2500);
           if (extracted && extracted.textContent.length >= 250) {
             rawContent = extracted.textContent;
             rawTitle = extracted.title || itemTitle;
