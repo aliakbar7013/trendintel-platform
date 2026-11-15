@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { STARTER_ARTICLES, INITIAL_CATEGORIES } from "./starter-data";
 import { injectInternalLinksAndCallout } from "./internal-linker";
 
@@ -111,6 +112,10 @@ export interface LocalStoreState {
 }
 
 function getDataFilePath(): string {
+  // On Vercel / AWS Lambda, use writable temporary directory
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return path.join(os.tmpdir(), "local-store.json");
+  }
   const cwd = process.cwd();
   if (cwd.includes(".next") && cwd.includes("standalone")) {
     const projectRoot = path.resolve(cwd, "..", "..");
@@ -207,14 +212,33 @@ class LocalStoreManager {
 
   private ensureFile(): string {
     const filePath = getDataFilePath();
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    if (!fs.existsSync(filePath)) {
-      const initial = buildInitialStore();
-      fs.writeFileSync(filePath, JSON.stringify(initial, null, 2), "utf-8");
-      this.dataCache = initial;
+    try {
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      if (!fs.existsSync(filePath)) {
+        // If bundled store exists in read-only folder, copy it
+        const bundledPath = path.join(process.cwd(), "data", "local-store.json");
+        let initial: LocalStoreState;
+        if (fs.existsSync(bundledPath)) {
+          try {
+            initial = JSON.parse(fs.readFileSync(bundledPath, "utf-8"));
+          } catch {
+            initial = buildInitialStore();
+          }
+        } else {
+          initial = buildInitialStore();
+        }
+        try {
+          fs.writeFileSync(filePath, JSON.stringify(initial, null, 2), "utf-8");
+        } catch {
+          // Read-only filesystem fallback
+        }
+        this.dataCache = initial;
+      }
+    } catch {
+      // Safe fallback
     }
     return filePath;
   }

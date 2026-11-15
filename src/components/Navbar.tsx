@@ -292,7 +292,7 @@ export default function Navbar() {
 
             {/* Bureau Access Button */}
             <Link
-              href="/admin"
+              href="/admin/login"
               prefetch={false}
               onClick={() => setIsNavigating(true)}
               title="Editorial Bureau Control Panel"
@@ -495,7 +495,7 @@ export default function Navbar() {
                     <span>RSS Wire</span>
                   </a>
                   <Link
-                    href="/admin"
+                    href="/admin/login"
                     prefetch={false}
                     onClick={() => {
                       setIsNavigating(true);
