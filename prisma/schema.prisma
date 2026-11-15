@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @db.VarChar(100)
+  slug        String    @unique @db.VarChar(100)
+  description String?   @db.VarChar(500)
+  color       String?   @default("#f59e0b") @db.VarChar(30)
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  feeds       Feed[]
+  articles    Article[]
+
+  @@index([slug])
+  @@index([order])
+}
+
+model Feed {
+  id            String    @id @default(cuid())
+  name          String    @db.VarChar(255)
+  url           String    @unique @db.VarChar(1000)
+  categoryId    String
+  isActive      Boolean   @default(true)
+  lastFetchedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  category      Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+model Article {
+  id            String    @id @default(cuid())
+  title         String    @db.VarChar(255)
+  seoTitle      String?   @db.VarChar(255)
+  slug          String    @unique @db.VarChar(255)
+  focusKeyword  String?   @db.VarChar(150)
+  excerpt       String    @db.VarChar(600)
+  tldr          String?   @db.Text
+  content       String    @db.LongText
+  keyTakeaways  String    @db.Text
+  faqs          String    @db.Text
+  trendStat     String?   @db.Text // JSON: { metric, label, context, change }
+  topicTags     String?   @db.VarChar(500) // JSON array: ["artificial-intelligence", "semiconductors"]
+  featuredImage String    @db.VarChar(1000)
+  imageCaption  String?   @db.VarChar(255)
+  sourceName    String    @db.VarChar(255)
+  sourceUrl     String    @db.VarChar(1000)
+  contentHash   String    @unique @db.VarChar(64)
+  readingTime   Int       @default(4)
+  views         Int       @default(0)
+  isFeatured    Boolean   @default(false)
+  isBreaking    Boolean   @default(false)
+  isIndexed     Boolean   @default(true) // Automated Content Pruning Guardrail
+  categoryId    String
+  publishedAt   DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  category      Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([publishedAt])
+  @@index([isFeatured])
+  @@index([isBreaking])
+  @@index([isIndexed])
+  @@index([contentHash])
+}
+
+model CronLog {
+  id                String   @id @default(cuid())
+  status            String   @db.VarChar(32) // "SUCCESS", "ERROR", "PARTIAL"
+  feedsScanned      Int      @default(0)
+  articlesPublished Int      @default(0)
+  articlesSkipped   Int      @default(0)
+  errors            String?  @db.Text
+  durationMs        Int      @default(0)
+  triggeredBy       String   @default("cron") @db.VarChar(64)
+  createdAt         DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(255)
+  email     String   @db.VarChar(255)
+  subject   String   @db.VarChar(255)
+  message   String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([isRead])
+}
+
+model ReferralVisit {
+  id         String   @id @default(cuid())
+  domain     String   @db.VarChar(255)
+  fullUrl    String   @db.VarChar(1000)
+  targetPath String   @db.VarChar(500)
+  count      Int      @default(1)
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@unique([domain, targetPath])
+  @@index([domain])
+  @@index([lastSeenAt])
+}
+
+model SiteSetting {
+  key       String   @id @db.VarChar(100)
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}
