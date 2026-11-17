@@ -168,19 +168,19 @@ export async function runAutoPublisher(
             .replace(/\s+/g, " ")
             .trim();
 
-          if (feedSnippet.length >= 200) {
+          if (feedSnippet.length >= 80) {
             rawContent = feedSnippet;
           } else {
             // Only scrape external URL if RSS snippet is too brief
-            const extracted = await extractArticleContent(itemUrl, 2000);
-            if (extracted && extracted.textContent.length >= 200) {
+            const extracted = await extractArticleContent(itemUrl, 1200);
+            if (extracted && extracted.textContent.length >= 80) {
               rawContent = extracted.textContent;
               rawTitle = extracted.title || itemTitle;
               sourcePublisher = extracted.siteName || sourcePublisher;
             }
           }
 
-          if (!rawContent || rawContent.length < 200) {
+          if (!rawContent || rawContent.length < 80) {
             console.log(`[AutoPublisher] Skipping item (insufficient readable text): ${itemUrl}`);
             articlesSkipped++;
             continue;
