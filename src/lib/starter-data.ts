@@ -35,10 +35,6 @@ export const INITIAL_CATEGORIES: InitialCategory[] = [
         name: "Wired Technology & Compute",
         url: "https://www.wired.com/feed/category/business/latest/rss",
       },
-      {
-        name: "Google News Frontier AI",
-        url: "https://news.google.com/rss/search?q=artificial+intelligence+OR+semiconductors+OR+LLM&hl=en-US&gl=US&ceid=US:en",
-      },
     ],
   },
   {
@@ -68,10 +64,6 @@ export const INITIAL_CATEGORIES: InitialCategory[] = [
         name: "Bitcoin Magazine",
         url: "https://bitcoinmagazine.com/.rss/full/",
       },
-      {
-        name: "Google News Digital Assets",
-        url: "https://news.google.com/rss/search?q=cryptocurrency+bitcoin+ethereum+stablecoins&hl=en-US&gl=US&ceid=US:en",
-      },
     ],
   },
   {
@@ -81,14 +73,6 @@ export const INITIAL_CATEGORIES: InitialCategory[] = [
     color: "#f59e0b",
     order: 3,
     feeds: [
-      {
-        name: "Yahoo Finance Global Markets",
-        url: "https://finance.yahoo.com/news/rssindex",
-      },
-      {
-        name: "CNBC Economy & Central Banks",
-        url: "https://search.cnbc.com/rs/search/combinedlist/view.xml?partnerId=wrss01&id=10000664",
-      },
       {
         name: "MarketWatch Top Intelligence",
         url: "https://feeds.content.dowjones.io/public/rss/mw_topstories",
@@ -102,8 +86,8 @@ export const INITIAL_CATEGORIES: InitialCategory[] = [
         url: "https://www.ft.com/markets?format=rss",
       },
       {
-        name: "Google News Global Economy",
-        url: "https://news.google.com/rss/search?q=stock+market+economy+finance+treasury&hl=en-US&gl=US&ceid=US:en",
+        name: "The Economist Finance",
+        url: "https://www.economist.com/finance-and-economics/rss.xml",
       },
     ],
   },

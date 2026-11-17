@@ -40,12 +40,12 @@ export async function validateArticleQuality(
     return { passed: false, reason: "Contains AI refusal or conversational disclaimers" };
   }
 
-  // 3. Word count verification (>= 450 words)
+  // 3. Word count verification (>= 350 words for fast, high-density analysis)
   const wordCount = countWords(article.content);
-  if (wordCount < 450) {
+  if (wordCount < 350) {
     return {
       passed: false,
-      reason: `Word count (${wordCount} words) is below the minimum threshold of 450 words`,
+      reason: `Word count (${wordCount} words) is below the minimum threshold of 350 words`,
     };
   }
 
