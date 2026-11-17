@@ -158,6 +158,15 @@ export function countWords(str: string): number {
     .filter((w) => w.length > 0).length;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorMsg)), ms)),
+  ]);
+}
+
+let quotaExhaustedUntil = 0;
+
 export async function synthesizeNewsArticle({
   rawTitle,
   rawContent,
@@ -176,6 +185,13 @@ export async function synthesizeNewsArticle({
     return generateFallbackSynthesis(rawTitle, rawContent, sourceName, categoryName);
   }
 
+  // If Gemini Free Tier quota is currently cooling down, return high-signal editorial fallback instantly
+  if (Date.now() < quotaExhaustedUntil) {
+    const remainingSecs = Math.ceil((quotaExhaustedUntil - Date.now()) / 1000);
+    console.warn(`[AI Engine] Gemini quota cooldown active (${remainingSecs}s remaining). Using instant editorial synthesis.`);
+    return generateFallbackSynthesis(rawTitle, rawContent, sourceName, categoryName);
+  }
+
   const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
@@ -191,20 +207,21 @@ Perform full journalistic synthesis following the system instructions and return
 
   const candidateModels = [
     process.env.GEMINI_MODEL,
-    "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.8-flash",
+    "gemini-3.5-flash",
   ].filter(Boolean) as string[];
 
   for (const modelName of candidateModels) {
     try {
-      const response = await ai.models.generateContent({
-        model: modelName,
-        contents: prompt,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          responseMimeType: "application/json",
-          responseSchema: {
+      const response = await withTimeout(
+        ai.models.generateContent({
+          model: modelName,
+          contents: prompt,
+          config: {
+            systemInstruction: SYSTEM_INSTRUCTION,
+            responseMimeType: "application/json",
+            responseSchema: {
             type: Type.OBJECT,
             properties: {
               title: {
@@ -289,7 +306,10 @@ Perform full journalistic synthesis following the system instructions and return
             ],
           },
         },
-      });
+      }),
+      12000,
+      `Gemini ${modelName} call exceeded 12000ms`
+    );
 
       const responseText = response.text;
       if (!responseText) {
@@ -307,7 +327,12 @@ Perform full journalistic synthesis following the system instructions and return
       return parsed;
     } catch (err: any) {
       console.warn(`Gemini model ${modelName} attempt failed:`, err.message);
-      // Try next model in list
+      if (err.message?.includes("429") || err.message?.includes("RESOURCE_EXHAUSTED") || err.message?.includes("quota")) {
+        // Project daily free quota exhausted. Activate 15-minute cooldown
+        quotaExhaustedUntil = Date.now() + 15 * 60 * 1000;
+        console.warn("[AI Engine] Gemini project free quota reached. Cooldown activated for 15 minutes.");
+        break;
+      }
     }
   }
 
@@ -335,7 +360,7 @@ function generateFallbackSynthesis(
     seoTitle: cleanTitle.slice(0, 58),
     slug: `${slug}-${Math.floor(Math.random() * 899 + 100)}`,
     focusKeyword: `${categoryName.toLowerCase().replace(/[^a-z0-9]/g, " ")} market analysis`.trim(),
-    metaDescription: `${excerpt.slice(0, 140)}... Comprehensive news analysis from TrendIntel.`,
+    metaDescription: `${excerpt.slice(0, 140)}... In-depth journalistic intelligence analysis from TrendIntel.`,
     tldr: `Recent dispatches across the ${categoryName} sector reveal accelerated operational realignment regarding ${cleanTitle}. Industry operators are committing substantial capital to navigate regulatory shifts, optimize hardware throughput, and establish durable commercial defensibility over the upcoming multi-quarter cycle.`,
     keyTakeaways: [
       `Key market development regarding ${cleanTitle.slice(0, 40)}.`,
@@ -344,56 +369,65 @@ function generateFallbackSynthesis(
       "Accelerated adoption cycles observed by institutional industry participants."
     ],
     content: `
-      <h2>What Happened: The Core Developments</h2>
-      <p>In a significant market movement reported across global intelligence networks, recent developments concerning ${cleanTitle} have triggered widespread attention among industry analysts and institutional stakeholders.</p>
-      <p>Original source coverage originating from ${sourceName} highlights a structural acceleration in the sector. Rather than representing an isolated data point, this event signifies a broader momentum shift across the ${categoryName} ecosystem.</p>
-      
+      <h2>What Happened: Core Developments & Industry Shockwaves</h2>
+      <p>In a major market intelligence update originating from ${sourceName}, structural shifts surrounding ${cleanTitle} are sending notable reverberations across the ${categoryName} ecosystem. Rather than an isolated tactical adjustment, industry observers interpret this movement as an indicator of broader operational realignments underway within global enterprise infrastructure.</p>
+      <p>Preliminary reports indicate that key institutional operators and capital allocators have initiated targeted strategic reviews. The intersection of escalating technical requirements, heightened regulatory expectations, and compressed execution cycles has forced leadership teams to accelerate deployment schedules while recalibrating their multi-quarter capital commitments.</p>
+      <p>Field intelligence confirms that market participants are closely monitoring competitive disclosures, with early data suggesting that commercial defensibility will increasingly hinge on proprietary execution architectures rather than generic platform adoption.</p>
+
       <div class="overflow-x-auto my-6 not-prose">
         <table class="w-full text-left text-xs font-mono border border-slate-700 rounded-lg">
           <thead class="bg-slate-800 text-slate-300 border-b border-slate-700">
             <tr>
-              <th class="p-3">Key Metric / Spec</th>
-              <th class="p-3">Previous Baseline</th>
-              <th class="p-3">Current Benchmark</th>
+              <th class="p-3">Strategic Dimension</th>
+              <th class="p-3">Previous Industry Baseline</th>
+              <th class="p-3">Current Benchmark / Target</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-800">
             <tr>
-              <td class="p-3 font-bold text-white">Cluster Scalability</td>
-              <td class="p-3 text-slate-400">10,000 Nodes</td>
-              <td class="p-3 text-emerald-400 font-bold">100,000+ Nodes</td>
+              <td class="p-3 font-bold text-white">Throughput & Scalability</td>
+              <td class="p-3 text-slate-400">Legacy Distributed Nodes</td>
+              <td class="p-3 text-emerald-400 font-bold">10x Compute Acceleration</td>
             </tr>
             <tr>
-              <td class="p-3 font-bold text-white">Power Draw</td>
-              <td class="p-3 text-slate-400">50 - 150 MW</td>
-              <td class="p-3 text-amber-400 font-bold">1.2 - 2.5 GW</td>
+              <td class="p-3 font-bold text-white">Capital Efficiency</td>
+              <td class="p-3 text-slate-400">High Recurring Overhead</td>
+              <td class="p-3 text-amber-400 font-bold">Automated Sovereign Workflows</td>
+            </tr>
+            <tr>
+              <td class="p-3 font-bold text-white">Market Positioning</td>
+              <td class="p-3 text-slate-400">Reactive Adaptation</td>
+              <td class="p-3 text-sky-400 font-bold">First-Mover Defensive Moat</td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <blockquote>
-        "The velocity of change in this market segment is compelling enterprise decision-makers to rethink foundational capital allocation and technological preparedness."
+        "The velocity of transformation across ${categoryName} is forcing enterprise decision-makers to rethink foundational capital allocation, technology infrastructure, and competitive preparedness."
       </blockquote>
 
-      <h2>Why It Matters: Strategic Analysis</h2>
-      <p>Understanding the second-order consequences of this shift requires examining the interplay between technological capacity and economic incentives. As organizations contend with increased competitive pressure and macro volatility, early movers are securing critical strategic moats.</p>
-      <p>Market analysts observe that operational efficiency gains achieved through these new frameworks provide a defensible buffer against rising input costs and tighter regulatory enforcement standards.</p>
+      <h2>Why It Matters: Strategic Architecture & Market Analysis</h2>
+      <p>To grasp the systemic significance of these developments, analysts must dissect the second-order economic and technological incentives driving operator behavior. As competitive saturation accelerates, historical operational playbooks are proving insufficient against nimble, tech-enabled entrants.</p>
+      <p>Enterprise stakeholders that establish technical supremacy early in this cycle will secure durable operational leverage. Conversely, organizations slow to transition risk facing compounding friction, margin compression, and diminished relevance across international procurement pipelines.</p>
+      <p>Quantitative benchmarks indicate that top-tier organizations are already redirecting substantial discretionary budgets into resilient, sovereign workflows, creating a protective buffer against unexpected macroeconomic shocks and localized regulatory headwinds.</p>
 
-      <h2>Market and Industry Impact</h2>
-      <p>The broader implications across global markets are expected to manifest across several dimensions:</p>
+      <h2>Market & Capital Impact: Who Wins and Who Loses</h2>
+      <p>The institutional ramifications across global markets are crystallizing along clear operational fault lines:</p>
       <ul>
-        <li><strong>Capital Reallocation:</strong> Strategic realignment of venture and institutional treasury funds toward high-signal assets.</li>
-        <li><strong>Regulatory Scrutiny:</strong> Heightened engagement from international standards organizations seeking harmonized compliance frameworks.</li>
-        <li><strong>Operational Transformation:</strong> Rapid integration of automated workflows to decouple revenue expansion from overhead growth.</li>
+        <li><strong>First-Mover Moats:</strong> Organizations possessing proprietary datasets, streamlined capital structures, and agile execution teams are capturing disproportionate market share.</li>
+        <li><strong>Displaced Incumbents:</strong> Legacy operators burdened by bloated technical debt and rigid corporate hierarchies face accelerating customer attrition and shrinking pricing power.</li>
+        <li><strong>Institutional Reallocation:</strong> Venture syndicates and corporate treasuries are systematically rotating risk-weighted assets toward mission-critical infrastructure plays.</li>
+        <li><strong>Regulatory Harmonization:</strong> Compliance and oversight bodies across key jurisdictions are introducing rigorous operational frameworks to govern emerging market conventions.</li>
       </ul>
 
       <h2>Broader Context & What Happens Next</h2>
-      <p>Looking ahead toward upcoming quarterly earnings cycles and regulatory disclosures, market participants should anticipate consolidated supply pacts and tighter sovereign export licensing. Organizations that proactively align capital allocation with these macro constraints will maintain decisive operational leverage.</p>
+      <p>As the upcoming quarterly reporting cycle approaches, industry analysts expect prominent market participants to deliver comprehensive disclosures detailing the fiscal impact of these strategic initiatives. Proactive risk management and swift technological adoption will remain the defining criteria separating category leaders from laggards.</p>
+      <p>Over the next twelve to eighteen months, market participants should anticipate consolidated industry partnerships, cross-border technology alliances, and heightened institutional due diligence. Those organizations that cultivate deep structural defensibility today will navigate tomorrow's macroeconomic landscape from a position of undeniable strength.</p>
     `,
     faqs: [
       {
-        question: "What is the primary significance of this report?",
+        question: `What is the primary industry significance of this report on ${cleanTitle.slice(0, 40)}?`,
         answer: "This development illustrates structural realignments within the sector, showcasing how leading operators adapt to shifting technological and financial paradigms."
       },
       {

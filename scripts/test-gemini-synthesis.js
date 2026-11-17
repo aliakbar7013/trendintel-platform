@@ -1,10 +1,11 @@
-const { GoogleGenAI, Type } = require('@google/genai');
-
+const { GoogleGenAI } = require('@google/genai');
 require('dotenv').config();
-const apiKey = process.env.GEMINI_API_KEY || 'your-gemini-api-key';
+
+const apiKey = process.env.GEMINI_API_KEY;
 
 async function run() {
-  console.log('Testing Gemini API Synthesis with user key...');
+  console.log('Testing Gemini API Synthesis with gemini-3.5-flash-lite...');
+  const t0 = Date.now();
   const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `
@@ -20,14 +21,14 @@ Perform full journalistic synthesis and return strictly valid JSON with title, s
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: 'gemini-3.5-flash-lite',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
       }
     });
 
-    console.log('Response status: SUCCESS');
+    console.log(`Response status: SUCCESS in ${Date.now() - t0}ms!`);
     const json = JSON.parse(response.text);
     console.log('Title:', json.title);
     console.log('Focus Keyword:', json.focusKeyword);
@@ -35,7 +36,7 @@ Perform full journalistic synthesis and return strictly valid JSON with title, s
     console.log('Takeaways count:', json.keyTakeaways?.length);
     console.log('Content preview:', (json.content || '').slice(0, 150) + '...');
   } catch (err) {
-    console.error('Synthesis test failed:', err);
+    console.error(`Synthesis test failed in ${Date.now() - t0}ms:`, err);
   }
 }
 

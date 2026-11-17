@@ -26,7 +26,7 @@ export interface PublisherEngineResult {
 }
 
 const parser = new Parser({
-  timeout: 10000,
+  timeout: 4000,
   headers: {
     "User-Agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
@@ -47,13 +47,11 @@ export async function runAutoPublisher(
 
   console.log(`[AutoPublisher] Starting execution (Triggered by: ${triggeredBy})...`);
 
-  // Run automated crawl-budget content pruning routine if DB is configured
-  if (isDatabaseConfigured()) {
-    try {
-      await pruneUnderperformingArticles();
-    } catch (pruneErr: any) {
+  // Run automated crawl-budget content pruning asynchronously (non-blocking)
+  if (isDatabaseConfigured() && Math.random() < 0.1) {
+    pruneUnderperformingArticles().catch((pruneErr: any) => {
       console.warn("[AutoPublisher] Pruning pass notice:", pruneErr.message);
-    }
+    });
   }
 
   try {
@@ -87,8 +85,9 @@ export async function runAutoPublisher(
       // Non-blocking fallback
     }
 
-    // 1 article per run runs in ~6-8s without timing out; 48-50 runs per day = 50 articles/day
-    const MAX_ARTICLES_PER_RUN = Math.max(1, settings.articlesPerRun || 1);
+    // For automated cron runs, strictly publish 1 article per trigger to guarantee sub-8s serverless completion.
+    // 48 cron runs per day (every 30 mins) = 48-50 published articles/day without serverless timeout risk.
+    const MAX_ARTICLES_PER_RUN = triggeredBy === "cron" ? 1 : Math.max(1, settings.articlesPerRun || 1);
 
     // Shuffle categories so publication is evenly distributed across AI, Crypto, Finance & Startups
     const randomizedCategories = [...categories].sort(() => Math.random() - 0.5);
@@ -97,7 +96,10 @@ export async function runAutoPublisher(
     for (const category of randomizedCategories) {
       if (articlesPublished >= MAX_ARTICLES_PER_RUN) break;
 
-      const categoryFeeds = (category.feeds || []).filter((f: any) => f.isActive !== false);
+      // Filter out feeds that are inactive or use redirect-only proxies (like Google News)
+      const categoryFeeds = (category.feeds || []).filter(
+        (f: any) => f.isActive !== false && !f.url?.includes("news.google.com")
+      );
       const randomizedFeeds = [...categoryFeeds].sort(() => Math.random() - 0.5);
 
       for (const feed of randomizedFeeds) {
@@ -116,8 +118,9 @@ export async function runAutoPublisher(
           continue;
         }
 
-        const items = feedData.items || [];
-        console.log(`[AutoPublisher] Found ${items.length} raw items in ${feed.name}`);
+        // Evaluate top 5 freshest candidates in the feed
+        const items = (feedData.items || []).slice(0, 5);
+        console.log(`[AutoPublisher] Found ${items.length} top items in ${feed.name}`);
 
         for (const item of items) {
           if (articlesPublished >= MAX_ARTICLES_PER_RUN) break;
@@ -149,29 +152,31 @@ export async function runAutoPublisher(
 
           console.log(`[AutoPublisher] Processing high-signal candidate: "${itemTitle.slice(0, 60)}"`);
 
-          // 3. Extraction with RSS-embedded fallback
+          // 3. Fast extraction prioritizing RSS-embedded content (0ms latency)
           let rawContent = "";
           let rawTitle = itemTitle;
           let sourcePublisher = feed.name || item.creator || "Editorial Bureau";
 
-          const extracted = await extractArticleContent(itemUrl, 2500);
-          if (extracted && extracted.textContent.length >= 250) {
-            rawContent = extracted.textContent;
-            rawTitle = extracted.title || itemTitle;
-            sourcePublisher = extracted.siteName || sourcePublisher;
+          const feedSnippet = (
+            item["content:encoded"] ||
+            item.content ||
+            item.contentSnippet ||
+            item.summary ||
+            ""
+          )
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          if (feedSnippet.length >= 200) {
+            rawContent = feedSnippet;
           } else {
-            const feedSnippet = (
-              item["content:encoded"] ||
-              item.content ||
-              item.contentSnippet ||
-              item.summary ||
-              ""
-            )
-              .replace(/<[^>]+>/g, " ")
-              .replace(/\s+/g, " ")
-              .trim();
-            if (feedSnippet.length >= 200) {
-              rawContent = feedSnippet;
+            // Only scrape external URL if RSS snippet is too brief
+            const extracted = await extractArticleContent(itemUrl, 2000);
+            if (extracted && extracted.textContent.length >= 200) {
+              rawContent = extracted.textContent;
+              rawTitle = extracted.title || itemTitle;
+              sourcePublisher = extracted.siteName || sourcePublisher;
             }
           }
 
@@ -334,12 +339,10 @@ export async function runAutoPublisher(
         console.warn("Revalidation notice:", cacheErr.message);
       }
 
-      // Notify IndexNow, WebSub & Search Engines
-      try {
-        await notifySearchEnginesAndHubs(publishedUrls);
-      } catch (pingErr: any) {
+      // Notify IndexNow, WebSub & Search Engines in background without blocking response
+      notifySearchEnginesAndHubs(publishedUrls).catch((pingErr: any) => {
         console.warn("Search engine ping notice:", pingErr.message);
-      }
+      });
     }
   } catch (globalErr: any) {
     console.error("[AutoPublisher] Global engine error:", globalErr.message);

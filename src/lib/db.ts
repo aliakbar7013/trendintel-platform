@@ -505,7 +505,7 @@ export async function getSiteSettings(): Promise<SiteSettings> {
         adsenseClientId: map.adsenseClientId || "ca-pub-XXXXXXXXXXXXXXXX",
         autoPilotEnabled: map.autoPilotEnabled !== "false",
         targetDailyArticles: parseInt(map.targetDailyArticles || "50", 10),
-        articlesPerRun: parseInt(map.articlesPerRun || "2", 10),
+        articlesPerRun: parseInt(map.articlesPerRun || "1", 10),
         cronIntervalMinutes: parseInt(map.cronIntervalMinutes || "30", 10),
       };
     }

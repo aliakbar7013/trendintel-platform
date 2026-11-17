@@ -536,7 +536,7 @@ class LocalStoreManager {
       adsenseClientId: "ca-pub-XXXXXXXXXXXXXXXX",
       autoPilotEnabled: true,
       targetDailyArticles: 50,
-      articlesPerRun: 2,
+      articlesPerRun: 1,
       cronIntervalMinutes: 30,
       ...(store.settings || {}),
     };
